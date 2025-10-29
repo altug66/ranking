@@ -1,56 +1,91 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>Friend Rankings</title>
   <style>
-    body { font-family: Arial; background: #111; color: #fff; text-align: center; }
-    .container { margin: 40px auto; width: 80%; max-width: 600px; }
-    .friend { padding: 10px; border-bottom: 1px solid #333; }
-    .highlight { color: gold; font-weight: bold; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #ffffff;
+      text-align: center;
+      padding: 30px;
+    }
+    h1 {
+      color: #58a6ff;
+    }
+    .friend {
+      border-bottom: 1px solid #333;
+      padding: 10px;
+      font-size: 1.1em;
+    }
+    .highlight {
+      color: gold;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Friend Rankings</h1>
-    <div id="ranking"></div>
-  </div>
+  <h1>Friend Rankings</h1>
+  <div id="ranking"></div>
 
   <script>
+    // -------------------------
+    // CONFIG: Change these if you rename spreadsheet columns
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRYDf_vp8N7BdFg638bNEzJhQAIBOBh_qmdbT2IMmmwtuHrSY28vzTk7ChgA2u7ZlTYtCTaj1zgjOj5/pub?output=csv";
+    const FIELD_ID = "id";        // column for unique id (used in ?id=xxx)
+    const FIELD_NAME = "name";    // column for friend name
+    const FIELD_RANK = "rank";    // column for rank number
+    const FIELD_COMMENT = "pointage"; // column for comments
+    const TOP_RANK_VISIBLE = 3;   // top N see full list
+
+    // -------------------------
+    // CSV parser that handles quoted fields
+    function parseCSV(text) {
+      const lines = text.trim().split("\n");
+      const headers = lines[0].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(h => h.replace(/"/g,''));
+      return lines.slice(1).map(line => {
+        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/"/g,''));
+        const entry = {};
+        headers.forEach((h,i) => entry[h] = values[i]);
+        entry[FIELD_RANK] = parseInt(entry[FIELD_RANK]);
+        return entry;
+      });
+    }
+
     const params = new URLSearchParams(window.location.search);
     const userId = params.get("id");
-    const sheetUrl = "YOUR_JSON_FEED_URL";
 
-    fetch(sheetUrl)
-      .then(res => res.json())
-      .then(data => {
-        const entries = data.feed.entry.map(e => ({
-          id: e.gsx$id.$t,
-          name: e.gsx$name.$t,
-          rank: parseInt(e.gsx$rank.$t),
-          comment: e.gsx$comment.$t
-        })).sort((a,b) => a.rank - b.rank);
+    fetch(csvUrl)
+      .then(res => res.text())
+      .then(text => {
+        const data = parseCSV(text).sort((a,b) => a[FIELD_RANK]-b[FIELD_RANK]);
+        const user = data.find(p => p[FIELD_ID] === userId);
+        const div = document.getElementById("ranking");
 
-        const user = entries.find(f => f.id === userId);
-        const rankingDiv = document.getElementById("ranking");
-
-        if (!user) {
-          rankingDiv.innerHTML = "<p>User not found!</p>";
+        if(!user){
+          div.innerHTML = "<p>User not found 😢</p>";
           return;
         }
 
-        let visibleEntries = [];
-        if (user.rank <= 3) {
-          visibleEntries = entries;
+        let visible;
+        if(user[FIELD_RANK] <= TOP_RANK_VISIBLE){
+          visible = data; // top friends see all
         } else {
-          visibleEntries = entries.filter(e => e.rank >= user.rank);
+          visible = data.filter(p => p[FIELD_RANK] >= user[FIELD_RANK]);
         }
 
-        visibleEntries.forEach(f => {
-          const div = document.createElement("div");
-          div.className = "friend" + (f.id === userId ? " highlight" : "");
-          div.textContent = `#${f.rank} ${f.name} — ${f.comment}`;
-          rankingDiv.appendChild(div);
+        visible.forEach(p => {
+          const el = document.createElement("div");
+          el.className = "friend" + (p[FIELD_ID] === userId ? " highlight" : "");
+          el.textContent = `#${p[FIELD_RANK]} ${p[FIELD_NAME]} — ${p[FIELD_COMMENT]}`;
+          div.appendChild(el);
         });
+      })
+      .catch(err=>{
+        document.getElementById("ranking").textContent="Error loading data 😕";
+        console.error(err);
       });
   </script>
 </body>
