@@ -3,23 +3,89 @@
 <head>
   <meta charset="utf-8" />
   <title>Friend Rankings</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #ffffff;
+      text-align: center;
+      padding: 30px;
+    }
+    h1 {
+      color: #58a6ff;
+    }
+    .friend {
+      border-bottom: 1px solid #333;
+      padding: 10px;
+      font-size: 1.1em;
+    }
+    .highlight {
+      color: gold;
+      font-weight: bold;
+      font-size: 1.2em;
+    }
+  </style>
 </head>
 <body>
   <h1>Friend Rankings</h1>
+  <div id="ranking"></div>
 
   <script>
+    // -------------------------
+    // CONFIG: Change these if you rename spreadsheet columns
     const csvUrl = "https://corsproxy.io/?https://docs.google.com/spreadsheets/d/e/2PACX-1vRYDf_vp8N7BdFg638bNEzJhQAIBOBh_qmdbT2IMmmwtuHrSY28vzTk7ChgA2u7ZlTYtCTaj1zgjOj5/pub?output=csv";
+    const FIELD_ID = "id";        // column for unique id (used in ?id=xxx)
+    const FIELD_NAME = "name";    // column for friend name
+    const FIELD_RANK = "rank";    // column for rank number
+    const FIELD_COMMENT = "pointage"; // column for comments
+    const TOP_RANK_VISIBLE = 3;   // top N see full list
+
+    // -------------------------
+    // CSV parser that handles quoted fields
+    function parseCSV(text) {
+      const lines = text.trim().split("\n");
+      const headers = lines[0].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(h => h.replace(/"/g,''));
+      return lines.slice(1).map(line => {
+        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(v => v.replace(/"/g,''));
+        const entry = {};
+        headers.forEach((h,i) => entry[h] = values[i]);
+        entry[FIELD_RANK] = parseInt(entry[FIELD_RANK]);
+        return entry;
+      });
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("id");
 
     fetch(csvUrl)
       .then(res => res.text())
       .then(text => {
-        console.log("CSV fetched successfully!");
-        console.log(text);
-        document.body.insertAdjacentHTML('beforeend', '<pre>'+text+'</pre>');
+        const data = parseCSV(text).sort((a,b) => a[FIELD_RANK]-b[FIELD_RANK]);
+        const user = data.find(p => p[FIELD_ID] === userId);
+        const div = document.getElementById("ranking");
+
+        if(!user){
+          div.innerHTML = "<p>User not found 😢</p>";
+          return;
+        }
+
+        let visible;
+        if(user[FIELD_RANK] <= TOP_RANK_VISIBLE){
+          visible = data; // top friends see all
+        } else {
+          visible = data.filter(p => p[FIELD_RANK] >= user[FIELD_RANK]);
+        }
+
+        visible.forEach(p => {
+          const el = document.createElement("div");
+          el.className = "friend" + (p[FIELD_ID] === userId ? " highlight" : "");
+          el.textContent = `#${p[FIELD_RANK]} ${p[FIELD_NAME]} — ${p[FIELD_COMMENT]}`;
+          div.appendChild(el);
+        });
       })
-      .catch(err => {
-        console.error("Failed to fetch CSV:", err);
-        document.body.insertAdjacentHTML('beforeend', '<p>Failed to fetch CSV</p>');
+      .catch(err=>{
+        document.getElementById("ranking").textContent="Error loading data 😕";
+        console.error(err);
       });
   </script>
 </body>
